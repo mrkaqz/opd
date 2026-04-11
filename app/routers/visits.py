@@ -1,8 +1,14 @@
+import os
+import shutil
+import tempfile
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy import or_, select, func
 from sqlalchemy.orm import Session, selectinload
 
-from app.database import get_db
+from app.database import get_db, DB_PATH
 from app.models import OpdVisit, OpdPatient, OpdPhone, OpdOwner
 from app.schemas import (
     VisitCreate, VisitOut, VisitSummary, PaginatedVisits,
@@ -226,3 +232,32 @@ def trigger_import(
 ):
     data = file.file.read()
     return importer_svc.run_import(db, file_bytes=data)
+
+
+_SQLITE_MAGIC = b"SQLite format 3\x00"
+
+
+@admin_router.get("/backup")
+def download_backup():
+    if not os.path.exists(DB_PATH):
+        raise HTTPException(status_code=404, detail="Database file not found")
+    filename = f"clinic_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    return FileResponse(DB_PATH, media_type="application/octet-stream", filename=filename)
+
+
+@admin_router.post("/restore", status_code=200)
+async def restore_backup(file: UploadFile = File(..., description="SQLite .db backup file")):
+    data = await file.read()
+    if not data.startswith(_SQLITE_MAGIC):
+        raise HTTPException(status_code=400, detail="Invalid file: not a SQLite database")
+    # Write to a temp file first, then atomically replace
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".db")
+    try:
+        with os.fdopen(tmp_fd, "wb") as f:
+            f.write(data)
+        shutil.move(tmp_path, DB_PATH)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise HTTPException(status_code=500, detail="Failed to restore database")
+    return {"detail": "Database restored successfully"}

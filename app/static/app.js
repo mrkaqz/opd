@@ -624,6 +624,32 @@ async function runImport() {
   }
 }
 
+/* ── Backup & Restore ────────────────────────────────────────────────────── */
+function downloadBackup() {
+  window.location.href = '/api/admin/backup';
+}
+
+async function restoreBackup() {
+  const file = document.getElementById('restoreFile').files[0];
+  const el   = document.getElementById('restoreResult');
+  if (!file) { showToast('Select a .db file first', 'warning'); return; }
+  if (!confirm('This will overwrite ALL current data. Are you sure?')) return;
+  el.innerHTML = '<div class="spinner-border spinner-border-sm me-2"></div> Restoring…';
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res = await fetch('/api/admin/restore', { method: 'POST', body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+    el.innerHTML = '<div class="alert alert-success mb-0">Restored successfully — reloading…</div>';
+    setTimeout(() => location.reload(), 1500);
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-danger mb-0">${e.message}</div>`;
+  }
+}
+
 /* ── Azure Client ID ──────────────────────────────────────────────────────── */
 async function loadClientId() {
   try {
