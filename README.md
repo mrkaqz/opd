@@ -30,35 +30,73 @@ A veterinary clinic OPD (Outpatient Department) web management system built with
 
 ## Quick Start
 
-### Option A — Docker (recommended)
+### Option A — Docker Compose with pre-built image (recommended)
+
+No need to clone the repo. Create a `docker-compose.yml` and a `data/` folder anywhere on your machine:
 
 ```bash
-# Pull latest image
-docker pull ghcr.io/mrkaqz/opd:latest
+mkdir clinic-opd && cd clinic-opd
+mkdir data
+```
 
-# Run with persistent database
+Create `docker-compose.yml`:
+
+```yaml
+services:
+  clinic-opd:
+    image: ghcr.io/mrkaqz/opd:latest
+    platform: linux/arm64          # Raspberry Pi 5 — remove for amd64
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data           # SQLite database persisted here
+    environment:
+      - DB_PATH=/app/data/clinic.db
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+    restart: unless-stopped
+```
+
+Then run:
+
+```bash
+docker compose pull        # pull latest image from GitHub
+docker compose up -d       # start in background
+```
+
+Open http://localhost:8000 (or `http://<device-ip>:8000` from another device on the same network).
+
+To update to a newer release:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+### Option B — Docker run (single command)
+
+```bash
+mkdir -p data
+
 docker run -d \
   -p 8000:8000 \
   -v $(pwd)/data:/app/data \
   --name clinic-opd \
+  --restart unless-stopped \
   ghcr.io/mrkaqz/opd:latest
 ```
 
-Open http://localhost:8000
-
-### Option B — Docker Compose
+### Option C — Build from source
 
 ```bash
-# Copy and edit environment file
-cp .env.example .env
-
-# Start
-docker compose up -d
+git clone https://github.com/mrkaqz/opd.git
+cd opd
+docker compose up -d --build
 ```
 
-### Option C — Local Development
+### Option D — Local development (no Docker)
 
 ```bash
+git clone https://github.com/mrkaqz/opd.git
+cd opd
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
