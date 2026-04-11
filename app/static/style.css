@@ -1,0 +1,21 @@
+body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f8f9fa; }
+
+.navbar { box-shadow: 0 2px 4px rgba(0,0,0,.15); }
+
+/* Visit list table */
+.table-visits td { vertical-align: middle; }
+.badge-file { font-size: .7rem; }
+
+/* Detail card */
+.detail-header { background: #0d6efd14; border-left: 4px solid #0d6efd; }
+
+/* Patient table rows */
+.patient-row:hover { background: #f0f4ff; }
+
+/* Search highlight */
+mark { background: #fff176; padding: 0 2px; border-radius: 2px; }
+
+/* Responsive tweaks */
+@media (max-width: 576px) {
+  .hide-sm { display: none !important; }
+}

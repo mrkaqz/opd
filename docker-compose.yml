@@ -1,0 +1,12 @@
+services:
+  clinic-opd:
+    build: .
+    platform: linux/arm64          # Raspberry Pi 5
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data           # SQLite database persisted here
+    environment:
+      - DB_PATH=/app/data/clinic.db
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}   # set in .env
+    restart: unless-stopped
