@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Data / secrets
+data/
+.env
+*.db
+*.sqlite
+
+# Excel source files
+*.xlsm
+*.xlsx
+*.xls
+
+# Dev / IDE
+.vscode/
+.idea/
+.claude/
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Docker
+.dockerignore

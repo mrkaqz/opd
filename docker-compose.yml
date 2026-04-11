@@ -1,12 +1,18 @@
 services:
   clinic-opd:
     build: .
-    platform: linux/arm64          # Raspberry Pi 5
+    platform: linux/arm64          # Raspberry Pi 5 (remove for x86/Mac)
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data           # SQLite database persisted here
+      - ./data:/app/data           # SQLite database persisted on host
     environment:
       - DB_PATH=/app/data/clinic.db
-      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}   # set in .env
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/visits?limit=1')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
