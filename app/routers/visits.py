@@ -1,10 +1,14 @@
+import io
 import os
 import shutil
 import tempfile
 from datetime import datetime
 
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
+
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import or_, select, func
 from sqlalchemy.orm import Session, selectinload
 
@@ -261,3 +265,69 @@ async def restore_backup(file: UploadFile = File(..., description="SQLite .db ba
             os.unlink(tmp_path)
         raise HTTPException(status_code=500, detail="Failed to restore database")
     return {"detail": "Database restored successfully"}
+
+
+@admin_router.get("/export-excel")
+def export_excel(db: Session = Depends(get_db)):
+    """Export all records as an Excel file matching the import format (sheet: List)."""
+    visits = (
+        db.query(OpdVisit)
+        .options(
+            selectinload(OpdVisit.patients),
+            selectinload(OpdVisit.phones),
+            selectinload(OpdVisit.owners),
+        )
+        .order_by(OpdVisit.opd_number)
+        .all()
+    )
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "List"
+
+    # Header row — matches import column order
+    headers = ["OPD#", "Owner Name", "Owner Name 2", "Pet Name", "Pet Type", "Phone"]
+    ws.append(headers)
+    header_fill = PatternFill("solid", fgColor="4472C4")
+    header_font = Font(bold=True, color="FFFFFF")
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    for visit in visits:
+        owners = [o.owner_name for o in visit.owners]
+        phones = [p.phone for p in visit.phones]
+        owner1 = owners[0] if len(owners) > 0 else None
+        owner2 = owners[1] if len(owners) > 1 else None
+        phone  = phones[0] if phones else None
+
+        if not visit.patients:
+            # OPD with no patients — still export one row
+            ws.append([visit.opd_number, owner1, owner2, None, None, phone])
+        else:
+            for patient in visit.patients:
+                ws.append([
+                    visit.opd_number,
+                    owner1,
+                    owner2,
+                    patient.pet_name,
+                    patient.pet_type,
+                    phone,
+                ])
+
+    # Auto-width columns
+    for col in ws.columns:
+        max_len = max((len(str(c.value)) if c.value else 0) for c in col)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"clinic_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

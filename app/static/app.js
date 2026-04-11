@@ -629,6 +629,10 @@ function downloadBackup() {
   window.location.href = '/api/admin/backup';
 }
 
+function downloadExcel() {
+  window.location.href = '/api/admin/export-excel';
+}
+
 async function restoreBackup() {
   const file = document.getElementById('restoreFile').files[0];
   const el   = document.getElementById('restoreResult');
