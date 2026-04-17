@@ -37,23 +37,25 @@ def _migrate(eng):
     """Apply incremental SQLite schema migrations."""
     with eng.connect() as conn:
 
-        # v1: move phone from opd_patients → opd_visits (legacy column, kept as dead weight)
-        visit_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(opd_visits)"))}
-        if "phone" not in visit_cols:
-            conn.execute(text("ALTER TABLE opd_visits ADD COLUMN phone TEXT"))
-            conn.execute(text("""
-                UPDATE opd_visits
-                SET phone = (
-                    SELECT phone FROM opd_patients
-                    WHERE opd_patients.opd_number = opd_visits.opd_number
-                    AND phone IS NOT NULL LIMIT 1
-                )
-            """))
-            conn.commit()
-
         tables = {row[0] for row in conn.execute(
             text("SELECT name FROM sqlite_master WHERE type='table'")
         )}
+
+        # v1: add phone column to opd_visits (legacy — only needed when upgrading
+        # from very old schema; skip entirely on a fresh install)
+        if "opd_visits" in tables:
+            visit_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(opd_visits)"))}
+            if "phone" not in visit_cols:
+                conn.execute(text("ALTER TABLE opd_visits ADD COLUMN phone TEXT"))
+                conn.execute(text("""
+                    UPDATE opd_visits
+                    SET phone = (
+                        SELECT phone FROM opd_patients
+                        WHERE opd_patients.opd_number = opd_visits.opd_number
+                        AND phone IS NOT NULL LIMIT 1
+                    )
+                """))
+                conn.commit()
 
         # v2: opd_phones table — one row per phone per OPD
         if "opd_phones" not in tables:
