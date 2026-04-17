@@ -740,6 +740,11 @@ async function initAuth() {
   }
 }
 
+function _pinKeyHandler(e) {
+  if (e.key >= '0' && e.key <= '9') { e.preventDefault(); _pinKey(e.key); }
+  else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); _pinKey('⌫'); }
+}
+
 function showPinOverlay() {
   _pinBuffer = '';
   _renderPinDots();
@@ -747,12 +752,14 @@ function showPinOverlay() {
   const el = document.getElementById('pinOverlay');
   el.classList.remove('d-none');
   el.classList.add('d-flex');
+  document.addEventListener('keydown', _pinKeyHandler);
 }
 
 function hidePinOverlay() {
   const el = document.getElementById('pinOverlay');
   el.classList.add('d-none');
   el.classList.remove('d-flex');
+  document.removeEventListener('keydown', _pinKeyHandler);
 }
 
 function _renderPinDots() {
