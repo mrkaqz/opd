@@ -34,7 +34,7 @@ function showView(name) {
     document.getElementById(`view-${v}`).classList.toggle('d-none', v !== name);
   });
   if (name === 'list') loadList();
-  if (name === 'settings') { loadClientId(); loadAuthStatus(); }
+  if (name === 'settings') { loadClientId(); loadAuthStatus(); loadPinStatus(); }
 }
 
 /* ── List view ───────────────────────────────────────────────────────────── */
@@ -721,7 +721,166 @@ function esc(str) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/* ── PIN Auth ────────────────────────────────────────────────────────────── */
+const SESSION_KEY = 'opd_session';
+let _pinBuffer = '';
+
+async function initAuth() {
+  const token = localStorage.getItem(SESSION_KEY) || '';
+  try {
+    const r = await fetch(`/api/auth/pin-status?token=${encodeURIComponent(token)}`);
+    const d = await r.json();
+    if (d.authenticated) {
+      showView('list');
+    } else {
+      showPinOverlay();
+    }
+  } catch {
+    showView('list'); // fallback: show app if backend unreachable
+  }
+}
+
+function showPinOverlay() {
+  _pinBuffer = '';
+  _renderPinDots();
+  _buildPinPad();
+  const el = document.getElementById('pinOverlay');
+  el.classList.remove('d-none');
+  el.classList.add('d-flex');
+}
+
+function hidePinOverlay() {
+  const el = document.getElementById('pinOverlay');
+  el.classList.add('d-none');
+  el.classList.remove('d-flex');
+}
+
+function _renderPinDots() {
+  const el = document.getElementById('pinDots');
+  el.innerHTML = [0,1,2,3].map(i =>
+    `<span style="width:14px;height:14px;border-radius:50%;border:2px solid #6c757d;
+      background:${i < _pinBuffer.length ? '#0d6efd' : 'transparent'};
+      display:inline-block;transition:background .15s"></span>`
+  ).join('');
+}
+
+function _buildPinPad() {
+  const pad = document.getElementById('pinPad');
+  const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
+  pad.innerHTML = keys.map(k => {
+    if (k === '') return `<div></div>`;
+    const icon = k === '⌫' ? `<i class="bi bi-backspace"></i>` : k;
+    return `<button class="btn btn-outline-secondary py-2 fw-semibold"
+              onclick="_pinKey('${k}')">${icon}</button>`;
+  }).join('');
+}
+
+function _pinKey(key) {
+  if (key === '⌫') {
+    _pinBuffer = _pinBuffer.slice(0, -1);
+    _renderPinDots();
+    return;
+  }
+  if (_pinBuffer.length >= 4) return;
+  _pinBuffer += key;
+  _renderPinDots();
+  if (_pinBuffer.length === 4) _submitPin();
+}
+
+async function _submitPin() {
+  const pin = _pinBuffer;
+  try {
+    const r = await fetch('/api/auth/pin/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      localStorage.setItem(SESSION_KEY, d.token);
+      hidePinOverlay();
+      showView('list');
+    } else {
+      // Wrong PIN — shake and reset
+      _pinBuffer = '';
+      _renderPinDots();
+      const errEl = document.getElementById('pinError');
+      errEl.classList.remove('invisible');
+      const card = document.querySelector('#pinOverlay .card');
+      card.animate([
+        { transform: 'translateX(-8px)' },
+        { transform: 'translateX(8px)' },
+        { transform: 'translateX(-6px)' },
+        { transform: 'translateX(6px)' },
+        { transform: 'translateX(0)' },
+      ], { duration: 350, easing: 'ease-out' });
+      setTimeout(() => errEl.classList.add('invisible'), 2000);
+    }
+  } catch {
+    _pinBuffer = '';
+    _renderPinDots();
+  }
+}
+
+async function loadPinStatus() {
+  try {
+    const d = await fetch('/api/auth/pin-status').then(r => r.json());
+    const toggle = document.getElementById('pinEnabledToggle');
+    const hint   = document.getElementById('pinToggleHint');
+    toggle.disabled = !d.pin_set;           // can't enable toggle if no PIN saved
+    toggle.checked  = d.pin_set && d.pin_enabled;
+    if (!d.pin_set) {
+      hint.textContent = 'No PIN set — save a PIN below to enable the lock.';
+    } else {
+      hint.textContent = d.pin_enabled
+        ? 'Lock is active. App will require PIN on startup.'
+        : 'Lock is disabled. PIN is saved but not enforced.';
+    }
+  } catch (_) {}
+}
+
+async function togglePinEnabled(enabled) {
+  const hint = document.getElementById('pinToggleHint');
+  try {
+    const r = await fetch('/api/auth/pin/enabled', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.statusText);
+    hint.textContent = enabled
+      ? 'Lock is active. App will require PIN on startup.'
+      : 'Lock is disabled. PIN is saved but not enforced.';
+    showToast(d.detail);
+  } catch (e) {
+    showToast(e.message, 'danger');
+    await loadPinStatus(); // revert toggle state on error
+  }
+}
+
+async function savePin() {
+  const current = document.getElementById('pinCurrent').value;
+  const newPin  = document.getElementById('pinNew').value;
+  const el      = document.getElementById('pinResult');
+  try {
+    const r = await fetch('/api/auth/pin/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_pin: current, new_pin: newPin }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.statusText);
+    el.innerHTML = `<div class="alert alert-success py-1 mb-0 small">${d.detail}</div>`;
+    document.getElementById('pinCurrent').value = '';
+    document.getElementById('pinNew').value = '';
+    loadPinStatus(); // refresh toggle state
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-danger py-1 mb-0 small">${e.message}</div>`;
+  }
+}
+
 /* ── Init ────────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-  showView('list');
+  initAuth();
 });
