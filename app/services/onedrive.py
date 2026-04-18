@@ -16,7 +16,7 @@ from app.models import AppConfig, AuthToken
 # Redirect URI: https://login.microsoftonline.com/common/oauth2/nativeclient
 _ENV_CLIENT_ID = os.environ.get("AZURE_CLIENT_ID", "")
 AUTHORITY = "https://login.microsoftonline.com/common"
-SCOPES = ["Files.Read.All", "offline_access"]
+SCOPES = ["Files.Read.All"]  # offline_access is reserved — MSAL adds it automatically
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 
