@@ -18,6 +18,15 @@ def list_folders(db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail=str(exc))
 
 
+@router.get("/folders/{item_id}", response_model=list[FolderItem])
+def list_subfolders(item_id: str, db: Session = Depends(get_db)):
+    try:
+        folders = od.list_subfolders(db, item_id)
+        return [FolderItem(**f) for f in folders]
+    except RuntimeError as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+
+
 @router.post("/folder")
 def set_folder(item_id: str, db: Session = Depends(get_db)):
     """Save the chosen OneDrive folder ID to app_config."""

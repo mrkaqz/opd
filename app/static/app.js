@@ -565,22 +565,66 @@ async function loadCurrentFolder() {
   } catch (_) {}
 }
 
+let _folderStack = []; // [{id, name}] breadcrumb trail
+
 async function loadFolders() {
+  _folderStack = [];
+  await _loadFolderLevel(null);
+}
+
+async function _loadFolderLevel(itemId) {
   const el = document.getElementById('folderList');
   el.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
   try {
-    const folders = await api('GET', '/api/onedrive/folders');
+    const url = itemId ? `/api/onedrive/folders/${encodeURIComponent(itemId)}` : '/api/onedrive/folders';
+    const folders = await api('GET', url);
+
+    // Breadcrumb
+    let breadcrumb = `<nav class="mb-2 small">
+      <span class="text-primary" style="cursor:pointer" onclick="_breadcrumbNav(-1)">
+        <i class="bi bi-house-door"></i> Root
+      </span>`;
+    _folderStack.forEach((f, i) => {
+      breadcrumb += ` / <span class="text-primary" style="cursor:pointer"
+        onclick="_breadcrumbNav(${i})">${esc(f.name)}</span>`;
+    });
+    breadcrumb += '</nav>';
+
     if (!folders.length) {
-      el.innerHTML = '<small class="text-muted">No folders found in OneDrive root.</small>';
+      el.innerHTML = breadcrumb + '<small class="text-muted">No subfolders here.</small>';
       return;
     }
-    el.innerHTML = folders.map(f => `
-      <button class="btn btn-outline-secondary btn-sm me-1 mb-1"
-        onclick="selectFolder('${esc(f.item_id)}', '${esc(f.name)}')">
-        <i class="bi bi-folder me-1"></i>${esc(f.name)}
-      </button>`).join('');
+
+    const btns = folders.map(f => `
+      <div class="d-flex align-items-center gap-1 mb-1">
+        <button class="btn btn-outline-secondary btn-sm flex-grow-1 text-start"
+          onclick="_openSubfolder('${esc(f.item_id)}', '${esc(f.name)}')">
+          <i class="bi bi-folder me-1"></i>${esc(f.name)}
+        </button>
+        <button class="btn btn-success btn-sm" title="Select this folder"
+          onclick="selectFolder('${esc(f.item_id)}', '${esc(f.name)}')">
+          <i class="bi bi-check-lg"></i>
+        </button>
+      </div>`).join('');
+
+    el.innerHTML = breadcrumb + btns;
   } catch (e) {
     el.innerHTML = `<span class="text-danger small">${e.message}</span>`;
+  }
+}
+
+async function _openSubfolder(itemId, name) {
+  _folderStack.push({ id: itemId, name });
+  await _loadFolderLevel(itemId);
+}
+
+async function _breadcrumbNav(index) {
+  if (index === -1) {
+    _folderStack = [];
+    await _loadFolderLevel(null);
+  } else {
+    _folderStack = _folderStack.slice(0, index + 1);
+    await _loadFolderLevel(_folderStack[_folderStack.length - 1].id);
   }
 }
 
@@ -589,6 +633,7 @@ async function selectFolder(itemId, name) {
   showToast(`Folder "${name}" saved`);
   loadCurrentFolder();
   document.getElementById('folderList').innerHTML = '';
+  _folderStack = [];
 }
 
 /* ── Import ───────────────────────────────────────────────────────────────── */

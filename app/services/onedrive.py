@@ -154,20 +154,15 @@ def set_config(db: Session, key: str, value: str):
 
 # ── Graph API calls ───────────────────────────────────────────────────────────
 
-def list_root_folders(db: Session) -> list[dict]:
-    token = _get_token(db)
-    if not token:
-        raise RuntimeError("Not authenticated")
-
+def _list_folders_url(token: str, url: str) -> list[dict]:
     with httpx.Client() as client:
         resp = client.get(
-            f"{GRAPH_BASE}/me/drive/root/children",
+            url,
             headers=_headers(token),
             params={"$filter": "folder ne null", "$select": "id,name,parentReference"},
         )
         resp.raise_for_status()
         items = resp.json().get("value", [])
-
     return [
         {
             "item_id": i["id"],
@@ -176,6 +171,20 @@ def list_root_folders(db: Session) -> list[dict]:
         }
         for i in items
     ]
+
+
+def list_root_folders(db: Session) -> list[dict]:
+    token = _get_token(db)
+    if not token:
+        raise RuntimeError("Not authenticated")
+    return _list_folders_url(token, f"{GRAPH_BASE}/me/drive/root/children")
+
+
+def list_subfolders(db: Session, item_id: str) -> list[dict]:
+    token = _get_token(db)
+    if not token:
+        raise RuntimeError("Not authenticated")
+    return _list_folders_url(token, f"{GRAPH_BASE}/me/drive/items/{item_id}/children")
 
 
 def find_opd_file(db: Session, opd_number: int) -> Optional[dict]:
