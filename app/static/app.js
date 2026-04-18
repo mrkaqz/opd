@@ -6,6 +6,7 @@ let authPollInterval = null;
 let _maxOpdNumber = 0;   // tracks highest OPD# seen so far
 let _sortBy  = 'opd_number';
 let _sortDir = 'desc';
+let _listGen = 0;   // incremented on each list load to cancel stale bg checks
 const newVisitModal = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('newVisitModal'));
 const patientModal  = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('patientModal'));
 
@@ -68,6 +69,7 @@ function sortBy(col) {
 }
 
 async function loadList() {
+  _listGen++;   // cancel any in-flight background file checks
   const params = new URLSearchParams({
     page: currentPage, limit: 50,
     sort_by: _sortBy, sort_dir: _sortDir,
@@ -109,8 +111,8 @@ function renderList(data) {
       <td class="hide-sm">${esc(v.phones) || '<span class="text-muted">—</span>'}</td>
       <td class="text-center">
         ${v.has_file
-          ? `<span class="badge bg-success badge-file"><i class="bi bi-file-pdf"></i> PDF</span>`
-          : `<span class="badge bg-secondary badge-file">No file</span>`}
+          ? `<span class="badge bg-success badge-file" id="file-badge-${v.opd_number}"><i class="bi bi-file-pdf"></i> PDF</span>`
+          : `<span class="badge bg-secondary badge-file" id="file-badge-${v.opd_number}">No file</span>`}
       </td>
       <td>
         <button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation();deleteVisit(${v.opd_number})">
@@ -148,6 +150,37 @@ function renderList(data) {
     <small class="text-muted">${total} records total</small>`;
 
   renderPagination(total, page, limit);
+
+  // Background-check uncached items (no await — fire and forget)
+  const unchecked = items.filter(v => !v.has_file).map(v => v.opd_number);
+  _bgCheckFiles(unchecked, _listGen);
+}
+
+/* ── Background file checker ─────────────────────────────────────────────── */
+async function _bgCheckFiles(opdNumbers, gen) {
+  if (!opdNumbers.length) return;
+  const CONCURRENCY = 3;
+  let idx = 0;
+
+  async function worker() {
+    while (idx < opdNumbers.length) {
+      if (_listGen !== gen) return;   // list changed — stop
+      const opd = opdNumbers[idx++];
+      try {
+        const info = await fetch(`/api/onedrive/file/${opd}`).then(r => r.ok ? r.json() : null);
+        if (_listGen !== gen) return;
+        if (info && info.found) {
+          const badge = document.getElementById(`file-badge-${opd}`);
+          if (badge) {
+            badge.className = 'badge bg-success badge-file';
+            badge.innerHTML = '<i class="bi bi-file-pdf"></i> PDF';
+          }
+        }
+      } catch (_) { /* silently ignore — e.g. OneDrive not configured */ }
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 }
 
 function renderPagination(total, page, limit) {
