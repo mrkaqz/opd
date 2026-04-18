@@ -188,7 +188,7 @@ def list_subfolders(db: Session, item_id: str) -> list[dict]:
 
 
 def find_opd_file(db: Session, opd_number: int) -> Optional[dict]:
-    """Look for {opd_number}.pdf in the configured folder by listing children."""
+    """Look for {opd_number}.pdf in the configured folder using direct path lookup."""
     token = _get_token(db)
     if not token:
         return None
@@ -197,32 +197,34 @@ def find_opd_file(db: Session, opd_number: int) -> Optional[dict]:
     if not folder_id:
         return None
 
-    # Try exact filename first, then zero-padded variants
-    filename = f"{opd_number}.pdf"
-    candidates = {filename, f"{opd_number:04d}.pdf", f"{opd_number:05d}.pdf"}
+    # Try filename variants in order: exact, 4-digit zero-padded, 5-digit zero-padded
+    # Deduplicate while preserving order (e.g. OPD 1234 → "1234.pdf" appears in both exact and 4-digit)
+    seen: set[str] = set()
+    candidates: list[str] = []
+    for name in [f"{opd_number}.pdf", f"{opd_number:04d}.pdf", f"{opd_number:05d}.pdf"]:
+        if name not in seen:
+            candidates.append(name)
+            seen.add(name)
 
-    with httpx.Client() as client:
-        # List all children in the folder and match by name
-        url = f"{GRAPH_BASE}/me/drive/items/{folder_id}/children"
-        while url:
+    # Direct path lookup — O(1) per candidate, works regardless of folder size
+    with httpx.Client(timeout=15) as client:
+        for filename in candidates:
             resp = client.get(
-                url,
+                f"{GRAPH_BASE}/me/drive/items/{folder_id}:/{filename}",
                 headers=_headers(token),
-                params={"$select": "id,name,webUrl", "$top": "999"},
+                params={"$select": "id,name,webUrl"},
             )
-            if resp.status_code == 404:
-                return None
-            resp.raise_for_status()
-            data = resp.json()
-            for item in data.get("value", []):
-                if item["name"].lower() in {c.lower() for c in candidates}:
-                    return {
-                        "item_id": item["id"],
-                        "name": item["name"],
-                        "web_url": item["webUrl"],
-                        "found": True,
-                    }
-            # Follow pagination if needed
-            url = data.get("@odata.nextLink")
+            if resp.status_code == 200:
+                item = resp.json()
+                return {
+                    "item_id": item["id"],
+                    "name": item["name"],
+                    "web_url": item["webUrl"],
+                    "found": True,
+                }
+            elif resp.status_code == 404:
+                continue  # Try next variant
+            else:
+                resp.raise_for_status()
 
     return None
