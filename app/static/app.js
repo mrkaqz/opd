@@ -590,8 +590,21 @@ async function _loadFolderLevel(itemId) {
     });
     breadcrumb += '</nav>';
 
+    // "Select this folder" button — shown whenever we're inside a subfolder
+    let selectCurrentBtn = '';
+    if (_folderStack.length > 0) {
+      const cur = _folderStack[_folderStack.length - 1];
+      selectCurrentBtn = `
+        <div class="mb-2">
+          <button class="btn btn-success btn-sm"
+            onclick="selectFolder('${esc(cur.id)}', '${esc(cur.name)}')">
+            <i class="bi bi-check-lg me-1"></i>Select "<strong>${esc(cur.name)}</strong>"
+          </button>
+        </div>`;
+    }
+
     if (!folders.length) {
-      el.innerHTML = breadcrumb + '<small class="text-muted">No subfolders here.</small>';
+      el.innerHTML = breadcrumb + selectCurrentBtn + '<small class="text-muted">No subfolders here.</small>';
       return;
     }
 
@@ -607,7 +620,7 @@ async function _loadFolderLevel(itemId) {
         </button>
       </div>`).join('');
 
-    el.innerHTML = breadcrumb + btns;
+    el.innerHTML = breadcrumb + selectCurrentBtn + btns;
   } catch (e) {
     el.innerHTML = `<span class="text-danger small">${e.message}</span>`;
   }
