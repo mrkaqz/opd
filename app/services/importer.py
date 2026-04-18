@@ -62,12 +62,8 @@ def run_import(db: Session, file_bytes: bytes) -> ImportResult:
                 skipped += 1
                 continue
 
-            pet_name = _str(row[COL_PET])
-            if not pet_name:
-                skipped += 1
-                continue
-
-            phone      = _str(row[COL_PHONE])
+            pet_name    = _str(row[COL_PET])
+            phone       = _str(row[COL_PHONE])
             owner_name  = _str(row[COL_OWNER])
             owner_name2 = _str(row[COL_OWNER2])
 
@@ -83,7 +79,7 @@ def run_import(db: Session, file_bytes: bytes) -> ImportResult:
                 batch_owners[opd_num] = set()
                 visits_created += 1
 
-            # Add phone (deduplicated per OPD)
+            # Add phone (deduplicated per OPD) — even when pet name is missing
             if phone:
                 db_phones  = existing_phones.get(opd_num, set())
                 new_phones = batch_phones.get(opd_num, set())
@@ -92,7 +88,7 @@ def run_import(db: Session, file_bytes: bytes) -> ImportResult:
                                     created_at=datetime.utcnow()))
                     batch_phones.setdefault(opd_num, set()).add(phone)
 
-            # Add owner names (deduplicated per OPD)
+            # Add owner names (deduplicated per OPD) — even when pet name is missing
             for name in filter(None, [owner_name, owner_name2]):
                 db_owners  = existing_owners.get(opd_num, set())
                 new_owners = batch_owners.get(opd_num, set())
@@ -101,14 +97,18 @@ def run_import(db: Session, file_bytes: bytes) -> ImportResult:
                                     created_at=datetime.utcnow()))
                     batch_owners.setdefault(opd_num, set()).add(name)
 
-            db.add(OpdPatient(
-                opd_number=opd_num,
-                pet_name=pet_name,
-                pet_type=_str(row[COL_TYPE]),
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
-            ))
-            patients_created += 1
+            # Only create a patient record if pet name is present
+            if pet_name:
+                db.add(OpdPatient(
+                    opd_number=opd_num,
+                    pet_name=pet_name,
+                    pet_type=_str(row[COL_TYPE]),
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow(),
+                ))
+                patients_created += 1
+            else:
+                skipped += 1  # count as skipped patient row, but OPD/phone/owner still processed
 
             if patients_created % 500 == 0:
                 db.flush()
