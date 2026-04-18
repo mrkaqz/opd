@@ -188,7 +188,7 @@ def list_subfolders(db: Session, item_id: str) -> list[dict]:
 
 
 def find_opd_file(db: Session, opd_number: int) -> Optional[dict]:
-    """Look for {opd_number}.pdf in the configured folder."""
+    """Look for {opd_number}.pdf in the configured folder by listing children."""
     token = _get_token(db)
     if not token:
         return None
@@ -197,23 +197,32 @@ def find_opd_file(db: Session, opd_number: int) -> Optional[dict]:
     if not folder_id:
         return None
 
+    # Try exact filename first, then zero-padded variants
     filename = f"{opd_number}.pdf"
+    candidates = {filename, f"{opd_number:04d}.pdf", f"{opd_number:05d}.pdf"}
 
     with httpx.Client() as client:
-        # Try direct item lookup by path within folder
-        resp = client.get(
-            f"{GRAPH_BASE}/me/drive/items/{folder_id}:/{filename}",
-            headers=_headers(token),
-            params={"$select": "id,name,webUrl"},
-        )
-        if resp.status_code == 404:
-            return None
-        resp.raise_for_status()
-        item = resp.json()
+        # List all children in the folder and match by name
+        url = f"{GRAPH_BASE}/me/drive/items/{folder_id}/children"
+        while url:
+            resp = client.get(
+                url,
+                headers=_headers(token),
+                params={"$select": "id,name,webUrl", "$top": "999"},
+            )
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            data = resp.json()
+            for item in data.get("value", []):
+                if item["name"].lower() in {c.lower() for c in candidates}:
+                    return {
+                        "item_id": item["id"],
+                        "name": item["name"],
+                        "web_url": item["webUrl"],
+                        "found": True,
+                    }
+            # Follow pagination if needed
+            url = data.get("@odata.nextLink")
 
-    return {
-        "item_id": item["id"],
-        "name": item["name"],
-        "web_url": item["webUrl"],
-        "found": True,
-    }
+    return None

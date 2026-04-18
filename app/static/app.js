@@ -560,7 +560,7 @@ async function loadCurrentFolder() {
     const cfg = await api('GET', '/api/onedrive/folder');
     const el = document.getElementById('currentFolder');
     el.textContent = cfg.folder_id
-      ? `Configured folder ID: ${cfg.folder_id}`
+      ? `Selected: ${cfg.folder_name || cfg.folder_id}`
       : 'No folder selected yet.';
   } catch (_) {}
 }
@@ -629,7 +629,7 @@ async function _breadcrumbNav(index) {
 }
 
 async function selectFolder(itemId, name) {
-  await api('POST', `/api/onedrive/folder?item_id=${encodeURIComponent(itemId)}`);
+  await api('POST', `/api/onedrive/folder?item_id=${encodeURIComponent(itemId)}&name=${encodeURIComponent(name)}`);
   showToast(`Folder "${name}" saved`);
   loadCurrentFolder();
   document.getElementById('folderList').innerHTML = '';
