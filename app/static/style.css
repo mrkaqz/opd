@@ -163,7 +163,15 @@ body {
   border-color: var(--brand-sky) !important;
 }
 
-/* ── Visit list table ──────────────────────────────────────── */
+/* ── Tables — Thai font vertical alignment ─────────────────── */
+/* IBM Plex Sans Thai Looped has tall ascenders (tone marks). Fix the
+   line box so text sits in the true vertical centre of every row.   */
+.table td, .table th {
+  vertical-align: middle;
+  line-height: 1.4;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
 .table-visits td { vertical-align: middle; }
 .badge-file { font-size: .7rem; }
 
