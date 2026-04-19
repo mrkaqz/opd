@@ -164,15 +164,19 @@ body {
 }
 
 /* ── Tables — Thai font vertical alignment ─────────────────── */
-/* IBM Plex Sans Thai Looped has tall ascenders (tone marks). Fix the
-   line box so text sits in the true vertical centre of every row.   */
-.table td, .table th {
-  vertical-align: middle;
-  line-height: 1.4;
-  padding-top: 9px;
-  padding-bottom: 9px;
+/* IBM Plex Sans Thai Looped has tall ascenders (tone marks like ้ ็ ั)
+   that inflate the line box. Force true vertical centre on every cell
+   with high-specificity selectors that beat Bootstrap's defaults.    */
+.table > :not(caption) > * > * {
+  vertical-align: middle !important;
+  line-height: 1.35;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
 }
-.table-visits td { vertical-align: middle; }
+.table-sm > :not(caption) > * > * {
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+}
 .badge-file { font-size: .7rem; }
 
 /* ── Detail header ─────────────────────────────────────────── */
