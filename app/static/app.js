@@ -34,6 +34,11 @@ function showView(name) {
   ['list', 'detail', 'settings'].forEach(v => {
     document.getElementById(`view-${v}`).classList.toggle('d-none', v !== name);
   });
+  // Update nav button active state
+  ['list', 'settings'].forEach(v => {
+    const btn = document.getElementById(`nav-${v}`);
+    if (btn) btn.classList.toggle('active', v === name);
+  });
   if (name === 'list') loadList();
   if (name === 'settings') { loadClientId(); loadAuthStatus(); loadPinStatus(); }
 }
